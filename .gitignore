@@ -1,0 +1,6 @@
+.vscode/
+.venv/
+**/*.pdf
+**/*.png
+*.zip
+**/.DS_Store
