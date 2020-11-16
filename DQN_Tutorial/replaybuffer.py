@@ -11,3 +11,6 @@ class ReplayBuffer:
     
     def sample(self, n):
         return random.choices(self._buffer, k=n)
+    
+    def __len__(self):
+        return len(self._buffer)
