@@ -142,7 +142,7 @@ class DQN:
 
         s_tensor = torch.tensor(states).float()
         a_tensor = torch.tensor(actions)
-        r_tensor = torch.tensor([rewards])
+        r_tensor = torch.tensor([rewards]).reshape((len(rewards), 1))
 
         prediction = self.q_network.forward(s_tensor).gather(1, a_tensor.unsqueeze(1))
         return torch.nn.MSELoss()(prediction, r_tensor)
