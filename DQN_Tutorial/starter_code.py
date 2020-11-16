@@ -22,10 +22,10 @@ class Agent:
         self.total_reward = None
         # map discrete to continuous actions
         self._action_map = {
-            0: np.array([0, 0.1], dtype=np.float),
-            1: np.array([0.1, 0], dtype=np.float),
-            2: np.array([0, -0.1], dtype=np.float),
-            3: np.array([-0.1, 0], dtype=np.float)
+            0: np.array([0.1, 0], dtype=np.float),  # RIGHT
+            1: np.array([0, 0.1], dtype=np.float),  # UP
+            2: np.array([-0.1, 0], dtype=np.float), # LEFT
+            3: np.array([0, -0.1], dtype=np.float)  # DOWN
         }
         # Reset the agent.
         self.reset()
@@ -58,7 +58,7 @@ class Agent:
 
     # Function for the agent to choose its next action
     def _choose_next_action(self):
-        # return a random integer in [0,3] (inclusive) [N, E, S, W]
+        # return a random integer in [0,3] (inclusive) [RIGHT, UP, LEFT, DOWN]
         return np.random.randint(0, 4)
 
     # Function to convert discrete action (as used by a DQN) to a continuous action (as used by the environment).
