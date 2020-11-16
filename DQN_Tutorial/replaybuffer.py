@@ -5,7 +5,7 @@ class ReplayBuffer:
     def __init__(self, size=5000):
         self._buffer = deque(maxlen=size)
     
-    def add(self, transition):
+    def append(self, transition):
         self._buffer.append(transition)
         return self
     
