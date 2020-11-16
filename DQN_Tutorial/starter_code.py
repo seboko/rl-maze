@@ -2,6 +2,7 @@
 import numpy as np
 import torch
 import time
+from matplotlib import pyplot as plt
 
 # Import the environment module
 from environment import Environment
@@ -18,6 +19,13 @@ class Agent:
         self.state = None
         # Create the agent's total reward for the current episode.
         self.total_reward = None
+        # map discrete to continuous actions
+        self._action_map = {
+            0: np.array([0, 0.1], dtype=np.float),
+            1: np.array([0.1, 0], dtype=np.float),
+            2: np.array([0, -0.1], dtype=np.float),
+            3: np.array([-0.1, 0], dtype=np.float)
+        }
         # Reset the agent.
         self.reset()
 
@@ -49,15 +57,12 @@ class Agent:
 
     # Function for the agent to choose its next action
     def _choose_next_action(self):
-        # Return discrete action 0
-        return 0
+        # return a random integer in [0,3] (inclusive) [N, E, S, W]
+        return np.random.randint(0, 4)
 
     # Function to convert discrete action (as used by a DQN) to a continuous action (as used by the environment).
     def _discrete_action_to_continuous(self, discrete_action):
-        if discrete_action == 0:
-            # Move 0.1 to the right, and 0 upwards
-            continuous_action = np.array([0.1, 0], dtype=np.float32)
-        return continuous_action
+        return self._action_map[discrete_action]
 
     # Function for the agent to compute its reward. In this example, the reward is based on the agent's distance to the goal after the agent takes an action.
     def _compute_reward(self, distance_to_goal):
@@ -110,8 +115,12 @@ class DQN:
 
     # Function to calculate the loss for a particular transition.
     def _calculate_loss(self, transition):
-        pass
-        # TODO
+        state, discrete_action, reward, _ = transition
+        s_tensor = torch.tensor([state]).float()
+        a_tensor = torch.tensor([discrete_action])
+        r_tensor = torch.tensor([[reward]])
+        prediction = self.q_network.forward(s_tensor).gather(1, a_tensor.unsqueeze(1))
+        return torch.nn.MSELoss()(prediction, r_tensor)
 
 
 # Main entry point
@@ -126,13 +135,35 @@ if __name__ == "__main__":
     # Create a DQN (Deep Q-Network)
     dqn = DQN()
 
+    # Create a graph which will show the loss as a function of the number of training iterations
+    fig, ax = plt.subplots()
+    ax.set(xlabel='Episode', ylabel='Loss', title='Loss Curve for DQN with online learning')
+
+    N_EPISODES = 100
+    EPISODE_LENGTH = 20
+
+    losses = np.zeros(N_EPISODES)
     # Loop over episodes
-    while True:
+    for episode in range(N_EPISODES):
+
+        episode_losses = np.zeros(EPISODE_LENGTH)
         # Reset the environment for the start of the episode.
         agent.reset()
         # Loop over steps within this episode. The episode length here is 20.
-        for step_num in range(20):
+        for step_num in range(EPISODE_LENGTH):
             # Step the agent once, and get the transition tuple for this step
             transition = agent.step()
+
+            loss = dqn.train_q_network(transition)
             # Sleep, so that you can observe the agent moving. Note: this line should be removed when you want to speed up training
-            time.sleep(0.2)
+
+            episode_losses[step_num] = loss
+
+            # time.sleep(0.2)
+        
+        losses[episode] = np.average(episode_losses)
+        print("Finished episode {}, average loss = {}", episode, losses[episode])
+
+    ax.plot(losses, color='blue')
+    plt.yscale('log')
+    fig.savefig("dqn_loss_vs_iterations.png")
