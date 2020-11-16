@@ -3,6 +3,7 @@ import numpy as np
 import torch
 import time
 from matplotlib import pyplot as plt
+from replaybuffer import ReplayBuffer
 
 # Import the environment module
 from environment import Environment
@@ -112,6 +113,14 @@ class DQN:
         self.optimiser.step()
         # Return the loss as a scalar
         return loss.item()
+    
+    # Train on batch of transitions
+    def batch_train_q_network(self, batch):
+        self.optimiser.zero_grad()
+        loss = self._calculate_batch_loss(batch)
+        loss.backward()
+        self.optimiser.step()
+        return loss.item()
 
     # Function to calculate the loss for a particular transition.
     def _calculate_loss(self, transition):
@@ -119,6 +128,22 @@ class DQN:
         s_tensor = torch.tensor([state]).float()
         a_tensor = torch.tensor([discrete_action])
         r_tensor = torch.tensor([[reward]])
+        prediction = self.q_network.forward(s_tensor).gather(1, a_tensor.unsqueeze(1))
+        return torch.nn.MSELoss()(prediction, r_tensor)
+    
+    def _calculate_batch_loss(self, batch):
+        states = []
+        actions = []
+        rewards = []
+        for state, action, reward, _ in batch:
+            states.append(state)
+            actions.append(action)
+            rewards.append(reward)
+
+        s_tensor = torch.tensor(states).float()
+        a_tensor = torch.tensor(actions)
+        r_tensor = torch.tensor([rewards])
+
         prediction = self.q_network.forward(s_tensor).gather(1, a_tensor.unsqueeze(1))
         return torch.nn.MSELoss()(prediction, r_tensor)
 
@@ -137,10 +162,14 @@ if __name__ == "__main__":
 
     # Create a graph which will show the loss as a function of the number of training iterations
     fig, ax = plt.subplots()
-    ax.set(xlabel='Episode', ylabel='Loss', title='Loss Curve for DQN with online learning')
+    ax.set(xlabel='Episode', ylabel='Loss', title='Loss Curve for DQN with experience replay buffer')
 
     N_EPISODES = 100
     EPISODE_LENGTH = 20
+    BUFFER_SIZE = 5000
+    BATCH_SIZE = 100
+
+    buffer = ReplayBuffer(BUFFER_SIZE)
 
     losses = np.zeros(N_EPISODES)
     # Loop over episodes
@@ -154,16 +183,18 @@ if __name__ == "__main__":
             # Step the agent once, and get the transition tuple for this step
             transition = agent.step()
 
-            loss = dqn.train_q_network(transition)
-            # Sleep, so that you can observe the agent moving. Note: this line should be removed when you want to speed up training
+            buffer.append(transition)
 
-            episode_losses[step_num] = loss
+            if len(buffer) >= BATCH_SIZE:
+                loss = dqn.batch_train_q_network(buffer.sample(BATCH_SIZE))
+                episode_losses[step_num] = loss
 
             # time.sleep(0.2)
         
         losses[episode] = np.average(episode_losses)
-        print("Finished episode {}, average loss = {}", episode, losses[episode])
+        print("Finished episode {}, average loss = {}".format(episode, losses[episode]))
 
+    # shift x-axis by BATCH_SIZE iterations
     ax.plot(losses, color='blue')
     plt.yscale('log')
-    fig.savefig("dqn_loss_vs_iterations.png")
+    fig.savefig("dqn_erb_loss_vs_iterations.png")
