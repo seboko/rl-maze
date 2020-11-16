@@ -1,12 +1,12 @@
 import numpy as np
 import torch
-import time
 from matplotlib import pyplot as plt
+import cv2
 from environment import Environment
 from starter_code import Agent, Network, DQN
 from replaybuffer import ReplayBuffer
+from q_value_visualiser import QValueVisualiser
 
-# Main entry point
 if __name__ == "__main__":
 
     # Create an environment.
@@ -18,9 +18,9 @@ if __name__ == "__main__":
     # Create a DQN (Deep Q-Network)
     dqn = DQN()
 
-    # Create a graph which will show the loss as a function of the number of training iterations
-    fig, ax = plt.subplots()
-    ax.set(xlabel='Episode', ylabel='Loss', title='Loss Curve for DQN with experience replay buffer')
+    # # Create a graph which will show the loss as a function of the number of training iterations
+    # fig, ax = plt.subplots()
+    # ax.set(xlabel='Episode', ylabel='Loss', title='Loss Curve for DQN with experience replay buffer')
 
     N_EPISODES = 100
     EPISODE_LENGTH = 20
@@ -47,12 +47,40 @@ if __name__ == "__main__":
                 loss = dqn.batch_train_q_network(buffer.sample(BATCH_SIZE))
                 episode_losses[step_num] = loss
 
-            # time.sleep(0.2)
         
         losses[episode] = np.average(episode_losses)
         print("Finished episode {}, average loss = {}".format(episode, losses[episode]))
 
-    # shift x-axis by BATCH_SIZE iterations
-    ax.plot(losses, color='blue')
-    plt.yscale('log')
-    fig.savefig("dqn_erb_loss_vs_episodes.png")
+    
+    # evaluate Q-value
+    q_values = np.zeros((10, 10, 4))
+    for x, col in zip(np.linspace(0.05, 0.95, 10), range(10)):
+        for y, row in zip(np.linspace(0.05, 0.95, 10), range(10)):
+            loc = torch.tensor([[x, y]], dtype=torch.float32)
+            q_value = dqn.q_network.forward(loc)
+            q_values[col, row] = q_value.detach().numpy()
+
+    visualiser = QValueVisualiser(environment=environment, magnification=500)
+    # Draw the image
+    visualiser.draw_q_values(q_values)
+
+    # draw greedy policy
+    EPISODE_LENGTH = 20
+    image = environment.draw(environment.init_state)
+    loc = environment.init_state
+    for _ in range(EPISODE_LENGTH):
+        q = dqn.q_network.forward(torch.tensor(loc, dtype=torch.float32))
+        greedy_direction = np.argmax(q.detach().numpy())
+        action = agent._discrete_action_to_continuous(greedy_direction)
+        next_loc, _ = environment.step(loc, action)
+        loc_tuple = (int(loc[0] * environment.magnification),
+                     int((1 - loc[1]) * environment.magnification))
+        next_loc_tuple = (int(next_loc[0] * environment.magnification),
+                          int((1 - next_loc[1]) * environment.magnification))
+
+        cv2.line(image, loc_tuple, next_loc_tuple, (0,255,0), thickness=5)
+        print("Location ", loc)
+        loc = next_loc
+    
+    cv2.imwrite('greedy_policy.png', image)
+        

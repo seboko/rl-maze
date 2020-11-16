@@ -75,3 +75,5 @@ class Environment:
         # This line is necessary to give time for the image to be rendered on the screen
         cv2.waitKey(1)
 
+        return self.image
+
