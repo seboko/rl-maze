@@ -114,12 +114,26 @@ class DQN:
         # Return the loss as a scalar
         return loss.item()
     
+    def state_dict_eq(self, d1, d2):
+        for (k1, v1), (k2, v2) in zip(d1.items(), d2.items()):
+            if k1 != k2:
+                print("keys not equal", k1, k2)
+                return False
+            if not torch.equal(v1, v2):
+                print("tensors not equal")
+                return False
+        return True
+
     # Train on batch of transitions
-    def batch_train_q_network(self, batch, gamma=0.9):
+    def batch_train_q_network(self, batch, gamma=0.9, target_network=None):
+        if target_network is not None:
+            target_net_weights = target_network.q_network.state_dict()
         self.optimiser.zero_grad()
-        loss = self._calculate_batch_loss(batch, gamma)
+        loss = self._calculate_batch_loss(batch, gamma, target_network)
         loss.backward()
         self.optimiser.step()
+        if target_network is not None:
+            assert self.state_dict_eq(target_network.q_network.state_dict(), target_net_weights)
         return loss.item()
 
     # Function to calculate the loss for a particular transition.
@@ -131,19 +145,24 @@ class DQN:
         prediction = self.q_network.forward(s_tensor).gather(1, a_tensor.unsqueeze(1))
         return torch.nn.MSELoss()(prediction, r_tensor)
     
-    def _calculate_batch_loss(self, batch, gamma):
+    def _calculate_batch_loss(self, batch, gamma, target_network):
         states = []
         actions = []
-        returns = []
+        rewards = []
+        next_states = []
         for state, action, reward, next_state in batch:
             states.append(state)
             actions.append(action)
-            q = self.q_network.forward(torch.tensor([next_state]).float())
-            returns.append(reward + gamma * torch.max(q).item())
+            rewards.append(reward)
+            next_states.append(next_state)
+
+        q = (target_network.q_network.forward(torch.tensor(next_states).float()) if target_network is not None
+             else self.q_network.forward(torch.tensor(next_states).float()))
+        q_max, _ = torch.max(q, 1)
+        r_tensor = torch.tensor(rewards).reshape((len(rewards), 1)) + gamma * q_max.reshape(len(rewards), 1)
 
         s_tensor = torch.tensor(states).float()
         a_tensor = torch.tensor(actions)
-        r_tensor = torch.tensor([returns]).reshape((len(returns), 1))
 
         prediction = self.q_network.forward(s_tensor).gather(1, a_tensor.unsqueeze(1))
         return torch.nn.MSELoss()(prediction, r_tensor)
