@@ -38,9 +38,9 @@ class Agent:
         self.total_reward = 0.0
 
     # Function to make the agent take one step in the environment.
-    def step(self):
+    def step(self, dqn=None, epsilon=None):
         # Choose the next action.
-        discrete_action = self._choose_next_action()
+        discrete_action = self._choose_next_action(dqn, epsilon)
         # Convert the discrete action into a continuous action.
         continuous_action = self._discrete_action_to_continuous(discrete_action)
         # Take one step in the environment, using this continuous action, based on the agent's current state. This returns the next state, and the new distance to the goal from this new state. It also draws the environment, if display=True was set when creating the environment object..
@@ -57,9 +57,18 @@ class Agent:
         return transition
 
     # Function for the agent to choose its next action
-    def _choose_next_action(self):
+    def _choose_next_action(self, dqn, epsilon):
         # return a random integer in [0,3] (inclusive) [RIGHT, UP, LEFT, DOWN]
-        return np.random.randint(0, 4)
+        if dqn is None:
+            return np.random.randint(0, 4)
+        
+        q = dqn.q_network.forward(torch.tensor([self.state]).float())
+        best = torch.argmax(q).item()
+        probs = np.full(4, epsilon / 4)
+        probs[best] = 1 - epsilon + epsilon / 4
+        return np.random.choice(range(4), p=probs)
+        
+
 
     # Function to convert discrete action (as used by a DQN) to a continuous action (as used by the environment).
     def _discrete_action_to_continuous(self, discrete_action):
