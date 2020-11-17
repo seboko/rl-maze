@@ -38,7 +38,7 @@ class Agent:
         self.num_episodes = 0
         self.steps_in_episode = 0
 
-        self.replaybuffer = ReplayBuffer()
+        self.replaybuffer = ReplayBuffer(capacity=5000, epsilon=0.1, alpha=1)
 
         self.dqn = DQN()
         self.target = DQN()
@@ -46,10 +46,10 @@ class Agent:
 
         self.epsilon_init = 1
         self.epsilon_decay = 0.1 ** (1 / 100)
-        self.epsilon_min = 0.1
+        self.epsilon_min = 0.02
         self.gamma = 0.95
         self.batch_size = 200
-        self.target_swap = 20
+        self.target_swap = 100
 
         # map discrete to continuous actions
         self._action_map = {
@@ -104,7 +104,7 @@ class Agent:
     # Function to set the next state and distance, which resulted from applying action self.action at state self.state
     def set_next_state_and_distance(self, next_state, distance_to_goal):
         
-        self._has_reached_goal = distance_to_goal < 0.3
+        self._has_reached_goal = distance_to_goal < 0.03
 
         # Convert the distance to a reward
         reward = 1 - distance_to_goal
@@ -142,13 +142,15 @@ class Network(torch.nn.Module):
         # Define the network layers. This example network has two hidden layers, each with 100 units.
         self.layer_1 = torch.nn.Linear(in_features=input_dimension, out_features=100)
         self.layer_2 = torch.nn.Linear(in_features=100, out_features=100)
+        self.layer_3 = torch.nn.Linear(in_features=100, out_features=100)
         self.output_layer = torch.nn.Linear(in_features=100, out_features=output_dimension)
 
     # Function which sends some input data through the network and returns the network's output. In this example, a ReLU activation function is used for both hidden layers, but the output layer has no activation function (it is just a linear layer).
     def forward(self, input):
         layer_1_output = torch.nn.functional.relu(self.layer_1(input))
         layer_2_output = torch.nn.functional.relu(self.layer_2(layer_1_output))
-        output = self.output_layer(layer_2_output)
+        layer_3_output = torch.nn.functional.relu(self.layer_3(layer_2_output))
+        output = self.output_layer(layer_3_output)
         return output
 
 
@@ -207,9 +209,10 @@ class DQN:
         return torch.nn.MSELoss()(prediction, r_tensor.float())
 
 class ReplayBuffer:
-    def __init__(self, capacity=5000, epsilon=0.1):
+    def __init__(self, capacity=5000, epsilon=0.1, alpha=1):
         self._capacity = capacity
         self._epsilon = epsilon
+        self._alpha = alpha
         self._buffer = np.zeros((capacity, 6), dtype=np.float)
         self._index = 0
         self._size = 0
@@ -227,17 +230,18 @@ class ReplayBuffer:
         self._buffer[self._index] = np.array(state + action + reward + next_state)
         self._size = min(self._size + 1, self._capacity)
 
-        # renormalize
-        self._weights[self._index] = max(np.max(self._weights[:self._size]), self._epsilon)
-        self._sampling_probs[:self._size] = self._weights[:self._size] / np.sum(self._weights[:self._size])
-        
+        self._renormalize_weights()
+
         self._index = (self._index + 1) % self._capacity
 
     def update_deltas(self, deltas):
         self._can_append = True
         self._weights[self._last_indices_returned] = deltas.flatten() + self._epsilon
-        self._sampling_probs[:self._size] = self._weights[:self._size] / np.sum(self._weights[:self._size])
+        self._renormalize_weights()
 
+    def _renormalize_weights(self):
+        weights = (self._weights[:self._size] + self._epsilon) ** self._alpha
+        self._sampling_probs[:self._size] = weights / np.sum(weights)
 
     def sample(self, n):
         self._can_append = False
