@@ -115,9 +115,9 @@ class DQN:
         return loss.item()
     
     # Train on batch of transitions
-    def batch_train_q_network(self, batch):
+    def batch_train_q_network(self, batch, gamma=0.9):
         self.optimiser.zero_grad()
-        loss = self._calculate_batch_loss(batch)
+        loss = self._calculate_batch_loss(batch, gamma)
         loss.backward()
         self.optimiser.step()
         return loss.item()
@@ -131,18 +131,19 @@ class DQN:
         prediction = self.q_network.forward(s_tensor).gather(1, a_tensor.unsqueeze(1))
         return torch.nn.MSELoss()(prediction, r_tensor)
     
-    def _calculate_batch_loss(self, batch):
+    def _calculate_batch_loss(self, batch, gamma):
         states = []
         actions = []
-        rewards = []
-        for state, action, reward, _ in batch:
+        returns = []
+        for state, action, reward, next_state in batch:
             states.append(state)
             actions.append(action)
-            rewards.append(reward)
+            q = self.q_network.forward(torch.tensor([next_state]).float())
+            returns.append(reward + gamma * torch.max(q).item())
 
         s_tensor = torch.tensor(states).float()
         a_tensor = torch.tensor(actions)
-        r_tensor = torch.tensor([rewards]).reshape((len(rewards), 1))
+        r_tensor = torch.tensor([returns]).reshape((len(returns), 1))
 
         prediction = self.q_network.forward(s_tensor).gather(1, a_tensor.unsqueeze(1))
         return torch.nn.MSELoss()(prediction, r_tensor)
