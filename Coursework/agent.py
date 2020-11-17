@@ -35,6 +35,9 @@ class Agent:
         self.action = None
         self.discrete_action = None
 
+        self.num_episodes = 0
+        self.steps_in_episode = 0
+
         self.replaybuffer = ReplayBuffer()
 
         self.dqn = DQN()
@@ -42,10 +45,10 @@ class Agent:
         self.target.q_network.load_state_dict(self.dqn.q_network.state_dict())
 
         self.epsilon_init = 1
-        self.epsilon_decay = 0.1 ** (1 / 20)
+        self.epsilon_decay = 0.1 ** (1 / 100)
         self.epsilon_min = 0.1
-        self.gamma = 0.9
-        self.batch_size = 1000
+        self.gamma = 0.95
+        self.batch_size = 200
         self.target_swap = 20
 
         # map discrete to continuous actions
@@ -58,10 +61,12 @@ class Agent:
 
     # Function to check whether the agent has reached the end of an episode
     def has_finished_episode(self):
-        if self.num_steps_taken % self.episode_length == 0:
-            return True
-        else:
-            return False
+        has_finished = self.steps_in_episode % self.episode_length == 0 or self._has_reached_goal
+        if has_finished:
+            print("Finished episode {} after {} steps, epsilon={}".format(self.num_episodes, self.num_steps_taken, self._current_epsilon()))
+            self.num_episodes += 1
+            self.steps_in_episode = 0
+        return has_finished
 
     # Function to get the next action, using whatever method you like
     def get_next_action(self, state):
@@ -70,6 +75,7 @@ class Agent:
         action = self._discrete_action_to_continuous(discrete_action)
         # Update the number of steps which the agent has taken
         self.num_steps_taken += 1
+        self.steps_in_episode += 1
         # Store the state; this will be used later, when storing the transition
         self.state = state
         # Store the action; this will be used later, when storing the transition
@@ -88,10 +94,7 @@ class Agent:
         return np.random.choice(range(4), p=probs)
     
     def _current_epsilon(self):
-        ep = max(self.epsilon_init * self.epsilon_decay ** (self.num_steps_taken // self.episode_length), self.epsilon_min)
-        if self.num_steps_taken % self.episode_length == 0:
-            print("episode={}, steps={}, epsilon={}".format(self.num_steps_taken // self.episode_length, self.num_steps_taken, ep))
-        return ep
+        return max(self.epsilon_init * self.epsilon_decay ** self.num_episodes, self.epsilon_min)
 
 
     # Function to convert discrete action (as used by a DQN) to a continuous action (as used by the environment).
@@ -100,6 +103,9 @@ class Agent:
 
     # Function to set the next state and distance, which resulted from applying action self.action at state self.state
     def set_next_state_and_distance(self, next_state, distance_to_goal):
+        
+        self._has_reached_goal = distance_to_goal < 0.3
+
         # Convert the distance to a reward
         reward = 1 - distance_to_goal
         # Create a transition
@@ -109,7 +115,7 @@ class Agent:
 
         if len(self.replaybuffer) >= self.batch_size:
             batch = self.replaybuffer.sample(self.batch_size)
-            self.dqn.batch_train_q_network(batch, self.gamma, self.target)
+            self.dqn.batch_train_q_network(batch, self.gamma, self.target, self.replaybuffer)
         
         if self.num_steps_taken % self.target_swap == 0:
             self.target.q_network.load_state_dict(self.dqn.q_network.state_dict())
@@ -168,7 +174,7 @@ class DQN:
         return True
 
     # Train on batch of transitions
-    def batch_train_q_network(self, batch, gamma=0.9, target_network=None, replaybuffer=None):
+    def batch_train_q_network(self, batch, gamma, target_network=None, replaybuffer=None):
         if target_network is not None:
             target_net_weights = target_network.q_network.state_dict()
         self.optimiser.zero_grad()
@@ -180,15 +186,10 @@ class DQN:
         return loss.item()
 
     def _calculate_batch_loss(self, batch, gamma, target_network, replaybuffer):
-        states = []
-        actions = []
-        rewards = []
-        next_states = []
-        for state, action, reward, next_state in batch:
-            states.append(state)
-            actions.append(action)
-            rewards.append(reward)
-            next_states.append(next_state)
+        states = batch[:,:2]
+        actions = batch[:,2]
+        rewards = batch[:, 3]
+        next_states = batch[:,4:]
 
         q = (target_network.q_network.forward(torch.tensor(next_states).float()) if target_network is not None
              else self.q_network.forward(torch.tensor(next_states).float()))
@@ -196,23 +197,53 @@ class DQN:
         r_tensor = torch.tensor(rewards).reshape((len(rewards), 1)) + gamma * q_max.reshape(len(rewards), 1)
 
         s_tensor = torch.tensor(states).float()
-        a_tensor = torch.tensor(actions)
-
-        # if replaybuffer is not None:
+        a_tensor = torch.tensor(actions, dtype=torch.int64)
 
         prediction = self.q_network.forward(s_tensor).gather(1, a_tensor.unsqueeze(1))
+
+        if replaybuffer is not None:
+            replaybuffer.update_deltas(torch.abs(prediction - r_tensor.float()).detach().numpy())
+
         return torch.nn.MSELoss()(prediction, r_tensor.float())
 
 class ReplayBuffer:
-    def __init__(self, size=5000):
-        self._buffer = deque(maxlen=size)
+    def __init__(self, capacity=5000, epsilon=0.1):
+        self._capacity = capacity
+        self._epsilon = epsilon
+        self._buffer = np.zeros((capacity, 6), dtype=np.float)
+        self._index = 0
+        self._size = 0
+        self._last_indices_returned = None
+        self._weights = np.zeros(capacity)
+        self._sampling_probs = np.zeros(capacity)
+        self._can_append = True
     
     def append(self, transition):
-        self._buffer.append(transition)
-        return self
-    
+        assert self._can_append
+        state = [coord for coord in transition[0]]
+        action = [transition[1]]
+        reward = [transition[2]]
+        next_state = [coord for coord in transition[3]]
+        self._buffer[self._index] = np.array(state + action + reward + next_state)
+        self._size = min(self._size + 1, self._capacity)
+
+        # renormalize
+        self._weights[self._index] = max(np.max(self._weights[:self._size]), self._epsilon)
+        self._sampling_probs[:self._size] = self._weights[:self._size] / np.sum(self._weights[:self._size])
+        
+        self._index = (self._index + 1) % self._capacity
+
+    def update_deltas(self, deltas):
+        self._can_append = True
+        self._weights[self._last_indices_returned] = deltas.flatten() + self._epsilon
+        self._sampling_probs[:self._size] = self._weights[:self._size] / np.sum(self._weights[:self._size])
+
+
     def sample(self, n):
-        return random.choices(self._buffer, k=n)
+        self._can_append = False
+        indices = np.random.choice(range(self._size), n, p=self._sampling_probs[:self._size])
+        self._last_indices_returned = indices
+        return self._buffer[indices]
     
     def __len__(self):
-        return len(self._buffer)
+        return self._size
