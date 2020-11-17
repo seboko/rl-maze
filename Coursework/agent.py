@@ -26,7 +26,7 @@ class Agent:
     # Function to initialise the agent
     def __init__(self):
         # Set the episode length
-        self.episode_length = 1000
+        self.episode_length = 2000
         # Reset the total number of steps which the agent has taken
         self.num_steps_taken = 0
         # The state variable stores the latest state of the agent in the environment
@@ -46,7 +46,7 @@ class Agent:
 
         self.epsilon_init = 1
         self.epsilon_decay = 0.1 ** (1 / 100)
-        self.epsilon_min = 0.02
+        self.epsilon_min = 0.1
         self.gamma = 0.95
         self.batch_size = 200
         self.target_swap = 100
@@ -176,7 +176,7 @@ class DQN:
         return True
 
     # Train on batch of transitions
-    def batch_train_q_network(self, batch, gamma, target_network=None, replaybuffer=None):
+    def batch_train_q_network(self, batch, gamma, target_network, replaybuffer=None):
         if target_network is not None:
             target_net_weights = target_network.q_network.state_dict()
         self.optimiser.zero_grad()
@@ -193,9 +193,10 @@ class DQN:
         rewards = batch[:, 3]
         next_states = batch[:,4:]
 
-        q = (target_network.q_network.forward(torch.tensor(next_states).float()) if target_network is not None
-             else self.q_network.forward(torch.tensor(next_states).float()))
-        q_max, _ = torch.max(q, 1)
+        q_target = target_network.q_network.forward(torch.tensor(next_states).float())
+        q_max_indices = torch.argmax(q_target, dim=1)
+
+        q_max = self.q_network.forward(torch.tensor(next_states).float()).gather(1, q_max_indices.unsqueeze(1))
         r_tensor = torch.tensor(rewards).reshape((len(rewards), 1)) + gamma * q_max.reshape(len(rewards), 1)
 
         s_tensor = torch.tensor(states).float()
