@@ -13,7 +13,7 @@ class QValueVisualiser:
         # Create the initial q values image
         self.q_values_image = np.zeros([int(self.magnification), int(self.magnification), 3], dtype=np.uint8)
 
-    def draw_q_values(self, q_values):
+    def draw_q_values(self, q_values, filename="q_values_image.png"):
         # Create an empty image
         self.q_values_image.fill(0)
         # Loop over the grid cells and actions, and draw each q value
@@ -34,7 +34,7 @@ class QValueVisualiser:
         # Draw the grid cells
         self._draw_grid_cells()
         # Show the image
-        cv2.imwrite('q_values_image.png', self.q_values_image)
+        cv2.imwrite(filename, self.q_values_image)
         cv2.imshow("Q Values", self.q_values_image)
         cv2.waitKey(1)
 
