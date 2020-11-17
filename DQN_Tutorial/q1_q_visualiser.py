@@ -54,8 +54,10 @@ if __name__ == "__main__":
     
     # evaluate Q-value
     q_values = np.zeros((10, 10, 4))
-    for x, col in zip(np.linspace(0.05, 0.95, 10), range(10)):
-        for y, row in zip(np.linspace(0.05, 0.95, 10), range(10)):
+    for col in range(10):
+        x = col / 10 + 0.05
+        for row in range(10):
+            y = row / 10 + 0.05
             loc = torch.tensor([[x, y]], dtype=torch.float32)
             q_value = dqn.q_network.forward(loc)
             q_values[col, row] = q_value.detach().numpy()
@@ -65,7 +67,6 @@ if __name__ == "__main__":
     visualiser.draw_q_values(q_values)
 
     # draw greedy policy
-    EPISODE_LENGTH = 20
     image = environment.draw(environment.init_state)
     loc = environment.init_state
     for _ in range(EPISODE_LENGTH):
@@ -82,5 +83,5 @@ if __name__ == "__main__":
         print("Location ", loc)
         loc = next_loc
     
-    cv2.imwrite('greedy_policy.png', image)
+    cv2.imwrite('greedy_policy_returns.png', image)
         
