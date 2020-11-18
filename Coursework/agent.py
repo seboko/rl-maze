@@ -45,8 +45,9 @@ class Agent:
         self.target.q_network.load_state_dict(self.dqn.q_network.state_dict())
 
         self.epsilon_init = 1
+        self.epsilon = self.epsilon_init
         self.epsilon_decay = 0.1 ** (1 / 70)
-        self.epsilon_min = 0.08
+        self.epsilon_min = 0.05
         self.gamma = 0.95
         self.batch_size = 200
         self.target_swap = 1000
@@ -67,15 +68,20 @@ class Agent:
 
     # Function to check whether the agent has reached the end of an episode
     def has_finished_episode(self):
+        has_finished = self.steps_in_episode % self.episode_length == 0 or self._has_reached_goal
         stuck = np.ptp(self.last_rewards) < self.min_d
-        has_finished = self.steps_in_episode % self.episode_length == 0 or self._has_reached_goal or stuck
+
         if has_finished:
             print("Finished episode {} after {} steps, epsilon={}".format(self.num_episodes, self.num_steps_taken, self._current_epsilon()))
-            if stuck and not self._has_reached_goal:
-                print("Stuck {}".format(np.ptp(self.last_rewards)))
             self.num_episodes += 1
             self.steps_in_episode = 0
-        return has_finished
+            self.epsilon *= self.epsilon_decay
+        elif stuck:
+            print("Stuck {}, repeating episode {}".format(np.ptp(self.last_rewards), self.num_episodes))
+            self.steps_in_episode = 0
+            self.epsilon += 0.01
+
+        return has_finished or stuck
 
     # Function to get the next action, using whatever method you like
     def get_next_action(self, state):
@@ -103,7 +109,7 @@ class Agent:
         return np.random.choice(range(4), p=probs)
     
     def _current_epsilon(self):
-        return max(self.epsilon_init * self.epsilon_decay ** self.num_episodes, self.epsilon_min)
+        return min(1, max(self.epsilon, self.epsilon_min))
 
 
     # Function to convert discrete action (as used by a DQN) to a continuous action (as used by the environment).
