@@ -54,6 +54,11 @@ class Agent:
 
         self._has_reached_goal = False
 
+        self._already_stuck = False
+        self._old_epsilon = self.epsilon
+        self._last_distance_to_goal = 1
+        self.hit_wall = 0
+
         self.min_d = 0.01
         self.n_last_rewards = 30
         self.last_rewards = np.zeros(self.n_last_rewards)
@@ -69,22 +74,30 @@ class Agent:
     # Function to check whether the agent has reached the end of an episode
     def has_finished_episode(self):
         has_finished = self.steps_in_episode % self.episode_length == 0 or self._has_reached_goal
-        stuck = np.ptp(self.last_rewards) < self.min_d
 
         if has_finished:
-            print("Finished episode {} after {} steps, epsilon={}".format(self.num_episodes, self.num_steps_taken, self._current_epsilon()))
+            print("Finished episode {} after {} steps, epsilon={}, hit_wall={}".format(self.num_episodes, self.num_steps_taken, self._current_epsilon(), self.hit_wall))
             self.num_episodes += 1
             self.steps_in_episode = 0
             self.epsilon *= self.epsilon_decay
-        elif stuck:
-            print("Stuck {}, repeating episode {}".format(np.ptp(self.last_rewards), self.num_episodes))
-            self.steps_in_episode = 0
-            self.epsilon += 0.01
+            self.hit_wall = 0
 
         return has_finished
 
     # Function to get the next action, using whatever method you like
     def get_next_action(self, state):
+        stuck = np.ptp(self.last_rewards) < self.min_d
+        if stuck:
+            if not self._already_stuck:
+                self._old_epsilon = self.epsilon
+            self.epsilon *= 2
+            self._already_stuck = True
+            print("Stuck {}, increasing epsilon to {}".format(np.ptp(self.last_rewards), self._current_epsilon()))
+        elif self._already_stuck:
+            self._already_stuck = False
+            self.epsilon = self._old_epsilon
+            print("Unstuck, resetting epsilon to {}".format(self._current_epsilon()))
+
         # Here, the action is random, but you can change this
         discrete_action = self._choose_next_action(state)
         action = self._discrete_action_to_continuous(discrete_action)
@@ -123,6 +136,13 @@ class Agent:
 
         # Convert the distance to a reward
         reward = 1 - distance_to_goal
+        if abs(self._last_distance_to_goal - distance_to_goal) < 0.0001:
+            reward -= 0.5
+            self.hit_wall += 1
+        if self._has_reached_goal:
+            reward += 10
+
+        self._last_distance_to_goal = distance_to_goal
         # Create a transition
         transition = (self.state, self.discrete_action, reward, next_state)
 
