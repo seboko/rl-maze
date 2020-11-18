@@ -38,18 +38,24 @@ class Agent:
         self.num_episodes = 0
         self.steps_in_episode = 0
 
-        self.replaybuffer = ReplayBuffer(capacity=5000, epsilon=0.1, alpha=1)
+        self.replaybuffer = ReplayBuffer(capacity=10000, epsilon=0.1, alpha=2)
 
         self.dqn = DQN()
         self.target = DQN()
         self.target.q_network.load_state_dict(self.dqn.q_network.state_dict())
 
         self.epsilon_init = 1
-        self.epsilon_decay = 0.1 ** (1 / 100)
-        self.epsilon_min = 0.1
+        self.epsilon_decay = 0.1 ** (1 / 70)
+        self.epsilon_min = 0.08
         self.gamma = 0.95
         self.batch_size = 200
-        self.target_swap = 100
+        self.target_swap = 1000
+
+        self._has_reached_goal = False
+
+        self.min_d = 0.01
+        self.n_last_rewards = 30
+        self.last_rewards = np.zeros(self.n_last_rewards)
 
         # map discrete to continuous actions
         self._action_map = {
@@ -61,9 +67,12 @@ class Agent:
 
     # Function to check whether the agent has reached the end of an episode
     def has_finished_episode(self):
-        has_finished = self.steps_in_episode % self.episode_length == 0 or self._has_reached_goal
+        stuck = np.ptp(self.last_rewards) < self.min_d
+        has_finished = self.steps_in_episode % self.episode_length == 0 or self._has_reached_goal or stuck
         if has_finished:
             print("Finished episode {} after {} steps, epsilon={}".format(self.num_episodes, self.num_steps_taken, self._current_epsilon()))
+            if stuck and not self._has_reached_goal:
+                print("Stuck {}".format(np.ptp(self.last_rewards)))
             self.num_episodes += 1
             self.steps_in_episode = 0
         return has_finished
@@ -110,6 +119,9 @@ class Agent:
         reward = 1 - distance_to_goal
         # Create a transition
         transition = (self.state, self.discrete_action, reward, next_state)
+
+        # save the last 10 rewards to see if we got stuck
+        self.last_rewards[self.steps_in_episode % self.n_last_rewards] = reward
 
         self.replaybuffer.append(transition)
 
@@ -190,7 +202,7 @@ class DQN:
     def _calculate_batch_loss(self, batch, gamma, target_network, replaybuffer):
         states = batch[:,:2]
         actions = batch[:,2]
-        rewards = batch[:, 3]
+        rewards = batch[:,3]
         next_states = batch[:,4:]
 
         q_target = target_network.q_network.forward(torch.tensor(next_states).float())
@@ -237,7 +249,7 @@ class ReplayBuffer:
 
     def update_deltas(self, deltas):
         self._can_append = True
-        self._weights[self._last_indices_returned] = deltas.flatten() + self._epsilon
+        self._weights[self._last_indices_returned] = deltas.flatten()
         self._renormalize_weights()
 
     def _renormalize_weights(self):
