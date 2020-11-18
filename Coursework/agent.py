@@ -57,10 +57,10 @@ class Agent:
         self._already_stuck = False
         self._old_epsilon = self.epsilon
         self._last_distance_to_goal = 1
-        self.hit_wall = 0
+        self.times_stuck = 0
 
         self.min_d = 0.01
-        self.n_last_rewards = 30
+        self.n_last_rewards = 10
         self.last_rewards = np.zeros(self.n_last_rewards)
 
         # map discrete to continuous actions
@@ -76,11 +76,11 @@ class Agent:
         has_finished = self.steps_in_episode % self.episode_length == 0 or self._has_reached_goal
 
         if has_finished:
-            print("Finished episode {} after {} steps, epsilon={}, hit_wall={}".format(self.num_episodes, self.num_steps_taken, self._current_epsilon(), self.hit_wall))
+            print("Finished episode {} after {} steps ({} in episode), epsilon={}, times_stuck={}".format(self.num_episodes, self.num_steps_taken, self.steps_in_episode, self._current_epsilon(), self.times_stuck))
             self.num_episodes += 1
             self.steps_in_episode = 0
             self.epsilon *= self.epsilon_decay
-            self.hit_wall = 0
+            self.times_stuck = 0
 
         return has_finished
 
@@ -90,13 +90,12 @@ class Agent:
         if stuck:
             if not self._already_stuck:
                 self._old_epsilon = self.epsilon
+                self.times_stuck += 1
             self.epsilon *= 2
             self._already_stuck = True
-            print("Stuck {}, increasing epsilon to {}".format(np.ptp(self.last_rewards), self._current_epsilon()))
         elif self._already_stuck:
             self._already_stuck = False
             self.epsilon = self._old_epsilon
-            print("Unstuck, resetting epsilon to {}".format(self._current_epsilon()))
 
         # Here, the action is random, but you can change this
         discrete_action = self._choose_next_action(state)
@@ -136,17 +135,17 @@ class Agent:
 
         # Convert the distance to a reward
         reward = 1 - distance_to_goal
-        if abs(self._last_distance_to_goal - distance_to_goal) < 0.0001:
-            reward -= 0.5
-            self.hit_wall += 1
-        if self._has_reached_goal:
-            reward += 10
+        # if abs(self._last_distance_to_goal - distance_to_goal) < 0.0001:
+        #     reward -= 0.5
+        #     self.hit_wall += 1
+        # if self._has_reached_goal:
+        #     reward += 10
 
-        self._last_distance_to_goal = distance_to_goal
+        # self._last_distance_to_goal = distance_to_goal
         # Create a transition
         transition = (self.state, self.discrete_action, reward, next_state)
 
-        # save the last 10 rewards to see if we got stuck
+        # save the last n rewards to see if we got stuck
         self.last_rewards[self.steps_in_episode % self.n_last_rewards] = reward
 
         self.replaybuffer.append(transition)
@@ -155,7 +154,7 @@ class Agent:
             batch = self.replaybuffer.sample(self.batch_size)
             self.dqn.batch_train_q_network(batch, self.gamma, self.target, self.replaybuffer)
         
-        if self.num_steps_taken % self.target_swap == 0:
+        if self.num_steps_taken % self.target_swap == 0 or self._has_reached_goal:
             self.target.q_network.load_state_dict(self.dqn.q_network.state_dict())
 
 
