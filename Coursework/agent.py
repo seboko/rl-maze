@@ -38,7 +38,7 @@ class Agent:
         self.num_episodes = 0
         self.steps_in_episode = 0
 
-        self.replaybuffer = ReplayBuffer(capacity=10000, epsilon=0.1, alpha=1.5)
+        self.replaybuffer = ReplayBuffer(capacity=10000, epsilon=0.1, alpha=0.7)
 
         self.dqn = DQN()
         self.target = DQN()
@@ -46,7 +46,7 @@ class Agent:
 
         self.epsilon_init = 1
         self.epsilon = self.epsilon_init
-        self.epsilon_decay = 0.1 ** (1 / 70)
+        self.epsilon_decay = 0.1 ** (1 / 50)
         self.epsilon_min = 0.05
         self.gamma = 0.95
         self.batch_size = 200
@@ -81,7 +81,7 @@ class Agent:
             self.steps_in_episode = 0
             self.epsilon += 0.01
 
-        return has_finished or stuck
+        return has_finished
 
     # Function to get the next action, using whatever method you like
     def get_next_action(self, state):
