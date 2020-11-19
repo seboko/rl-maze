@@ -69,7 +69,7 @@ class Agent:
     # Function to check whether the agent has reached the end of an episode
     def has_finished_episode(self):
         has_finished = self.steps_in_episode % self.episode_length == 0 or self._has_reached_goal
-        stuck = np.ptp(self.last_rewards) < self.min_d
+        stuck = self._stuck()
 
         if has_finished:
             print("Finished episode {} after {} steps, epsilon={}".format(self.num_episodes, self.num_steps_taken, self._current_epsilon()))
@@ -80,11 +80,19 @@ class Agent:
             else:
                 self.epsilon *= self.epsilon_decay
         elif stuck:
-            print("Stuck {}, repeating episode {}".format(np.ptp(self.last_rewards), self.num_episodes))
             self.steps_in_episode = 0
             self.epsilon += 0.01
 
         return has_finished or stuck
+
+    def _stuck(self):
+        last_transitions = self.replaybuffer.get_last_transitions(30)
+        if last_transitions is None:
+            return False
+        if np.ptp(last_transitions[:, 0]) < 0.04 and np.ptp(last_transitions[:, 1]) < 0.04:
+            print("stuck x={}, y={}".format(np.ptp(last_transitions[:, 0]), np.ptp(last_transitions[:, 1])))
+            return self.epsilon < 0.5
+        return False
 
     # Function to get the next action, using whatever method you like
     def get_next_action(self, state):
@@ -270,6 +278,13 @@ class ReplayBuffer:
         indices = np.random.choice(range(self._size), n, p=self._sampling_probs[:self._size])
         self._last_indices_returned = indices
         return self._buffer[indices]
+
+    def get_last_transitions(self, n):
+        if n > self._size:
+            return None
+        if self._index - n < 0:
+            return np.concatenate((self._buffer[:self._index], self._buffer[-(n-self._index):]))
+        return self._buffer[self._index-n:self._index]
     
     def __len__(self):
         return self._size
