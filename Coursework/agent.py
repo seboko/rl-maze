@@ -58,6 +58,7 @@ class Agent:
         self._old_epsilon = self.epsilon
         self._last_distance_to_goal = 1
         self.hit_wall = 0
+        self.rand_actions = 0
 
         self.min_d = 0.01
         self.n_last_rewards = 30
@@ -90,16 +91,17 @@ class Agent:
     # Function to get the next action, using whatever method you like
     def get_next_action(self, state):
         stuck = np.ptp(self.last_rewards) < self.min_d
-        if stuck:
-            if not self._already_stuck:
-                self._old_epsilon = self.epsilon
-            self.epsilon = 2 * self._current_epsilon()
-            self._already_stuck = True
+        if stuck and self.rand_actions == 0:
+            self._old_epsilon = self.epsilon
+            self.epsilon = 1
+            self.rand_actions = 50
             print("Stuck {}, increasing epsilon to {}".format(np.ptp(self.last_rewards), self._current_epsilon()))
-        elif self._already_stuck:
-            self._already_stuck = False
-            self.epsilon = self._old_epsilon
-            print("Unstuck, resetting epsilon to {}".format(self._current_epsilon()))
+        if self.rand_actions > 0:
+            self.rand_actions -= 1
+            if self.rand_actions == 0:
+                print("Resetting epsilon to {}".format(self._old_epsilon))
+                self.epsilon = self._old_epsilon
+        
 
         # Here, the action is random, but you can change this
         discrete_action = self._choose_next_action(state)
