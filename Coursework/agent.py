@@ -90,11 +90,11 @@ class Agent:
 
     # Function to get the next action, using whatever method you like
     def get_next_action(self, state):
-        stuck = np.ptp(self.last_rewards) < self.min_d
+        stuck = self._stuck()
         if stuck and self.rand_actions == 0:
             self._old_epsilon = self.epsilon
             self.epsilon = 1
-            self.rand_actions = 50
+            self.rand_actions = 20
             print("Stuck {}, increasing epsilon to {}".format(np.ptp(self.last_rewards), self._current_epsilon()))
         if self.rand_actions > 0:
             self.rand_actions -= 1
@@ -116,6 +116,15 @@ class Agent:
         self.discrete_action = discrete_action
 
         return action
+    
+    def _stuck(self):
+        last_transitions = self.replaybuffer.get_last_transitions(30)
+        if last_transitions is None:
+            return False
+        if np.ptp(last_transitions[:, 0]) < 0.04 and np.ptp(last_transitions[:, 1]) < 0.04:
+            print("stuck")
+            return True
+        return False
 
     # Function for the agent to choose its next action
     def _choose_next_action(self, state):
@@ -292,6 +301,13 @@ class ReplayBuffer:
         indices = np.random.choice(range(self._size), n, p=self._sampling_probs[:self._size])
         self._last_indices_returned = indices
         return self._buffer[indices]
+    
+    def get_last_transitions(self, n):
+        if n > self._size:
+            return None
+        if self._index - n < 0:
+            return np.concatenate((self._buffer[:self._index], self._buffer[-(n-self._index):]))
+        return self._buffer[self._index-n:self._index]
     
     def __len__(self):
         return self._size
