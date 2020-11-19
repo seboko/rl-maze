@@ -50,7 +50,8 @@ class Agent:
         self.epsilon_min = 0.05
         self.gamma = 0.95
         self.batch_size = 200
-        self.target_swap = 1000
+        self.target_swap = 500
+        self.min_distance = 100
 
         self._has_reached_goal = False
 
@@ -135,11 +136,15 @@ class Agent:
 
         # Convert the distance to a reward
         reward = 1 - distance_to_goal
-        # if abs(self._last_distance_to_goal - distance_to_goal) < 0.0001:
-        #     reward -= 0.5
-        #     self.hit_wall += 1
-        # if self._has_reached_goal:
-        #     reward += 10
+        if abs(self._last_distance_to_goal - distance_to_goal) < 0.0001:
+            reward = 0
+            self.hit_wall += 1
+        if self._has_reached_goal:
+            reward += 10
+        if distance_to_goal < self.min_distance:
+            print("Got special curiosity award!")
+            reward += 2
+            self.min_distance = distance_to_goal
 
         # self._last_distance_to_goal = distance_to_goal
         # Create a transition
@@ -154,7 +159,7 @@ class Agent:
             batch = self.replaybuffer.sample(self.batch_size)
             self.dqn.batch_train_q_network(batch, self.gamma, self.target, self.replaybuffer)
         
-        if self.num_steps_taken % self.target_swap == 0 or self._has_reached_goal:
+        if self.num_steps_taken % self.target_swap == 0:
             self.target.q_network.load_state_dict(self.dqn.q_network.state_dict())
 
 
