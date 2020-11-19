@@ -147,3 +147,5 @@ class Environment:
         cv2.imshow("Environment", self.image)
         # This line is necessary to give time for the image to be rendered on the screen
         cv2.waitKey(1)
+
+        return self.image

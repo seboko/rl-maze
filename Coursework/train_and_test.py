@@ -3,7 +3,7 @@ import numpy as np
 
 from random_environment import Environment
 from agent import Agent
-
+import cv2
 
 # Main entry point
 if __name__ == "__main__":
@@ -15,7 +15,7 @@ if __name__ == "__main__":
     # Create a random seed, which will define the environment
     random_seed = int(time.time())
     # random_seed = 1605645667 # loch ness
-    random_seed = 1605721878
+    # random_seed = 1605721878
     np.random.seed(random_seed)
     print("seed", random_seed)
 
@@ -59,7 +59,15 @@ if __name__ == "__main__":
         if distance_to_goal < 0.03:
             has_reached_goal = True
             break
+        loc_tuple = (int(state[0] * environment.magnification),
+                     int((1 - state[1]) * environment.magnification))
+        next_loc_tuple = (int(next_state[0] * environment.magnification),
+                          int((1 - next_state[1]) * environment.magnification))
+
+        cv2.line(environment.image, loc_tuple, next_loc_tuple, (0,255,0), thickness=2)
         state = next_state
+    
+    cv2.imwrite("final_state.png", environment.image)
 
     # Print out the result
     if has_reached_goal:

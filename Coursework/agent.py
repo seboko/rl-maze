@@ -86,12 +86,12 @@ class Agent:
         return has_finished or stuck
 
     def _stuck(self):
-        last_transitions = self.replaybuffer.get_last_transitions(30)
+        last_transitions = self.replaybuffer.get_last_transitions(20)
         if last_transitions is None:
             return False
-        if np.ptp(last_transitions[:, 0]) < 0.04 and np.ptp(last_transitions[:, 1]) < 0.04:
+        if np.ptp(last_transitions[:, 0]) < 0.02 and np.ptp(last_transitions[:, 1]) < 0.02:
             print("stuck x={}, y={}".format(np.ptp(last_transitions[:, 0]), np.ptp(last_transitions[:, 1])))
-            return self.epsilon < 0.5
+            return True
         return False
 
     # Function to get the next action, using whatever method you like
