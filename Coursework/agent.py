@@ -38,7 +38,7 @@ class Agent:
         self.num_episodes = 0
         self.steps_in_episode = 0
 
-        self.replaybuffer = ReplayBuffer(capacity=10000, epsilon=0.1, alpha=0.7)
+        self.replaybuffer = ReplayBuffer(capacity=10000, epsilon=0.1, alpha=1.5)
 
         self.dqn = DQN()
         self.target = DQN()
@@ -93,7 +93,7 @@ class Agent:
         if stuck:
             if not self._already_stuck:
                 self._old_epsilon = self.epsilon
-            self.epsilon *= 2
+            self.epsilon = 2 * self._current_epsilon()
             self._already_stuck = True
             print("Stuck {}, increasing epsilon to {}".format(np.ptp(self.last_rewards), self._current_epsilon()))
         elif self._already_stuck:
