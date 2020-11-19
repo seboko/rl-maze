@@ -15,6 +15,7 @@ if __name__ == "__main__":
     # Create a random seed, which will define the environment
     random_seed = int(time.time())
     # random_seed = 1605645667 # loch ness
+    random_seed = 1605721878
     np.random.seed(random_seed)
     print("seed", random_seed)
 
