@@ -67,7 +67,7 @@ if __name__ == "__main__":
         cv2.line(environment.image, loc_tuple, next_loc_tuple, (0,255,0), thickness=2)
         state = next_state
     
-    cv2.imwrite("final_state.png", environment.image)
+    cv2.imwrite("final_state_{}.png".format(random_seed), environment.image)
 
     # Print out the result
     if has_reached_goal:

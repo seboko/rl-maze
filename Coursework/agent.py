@@ -38,7 +38,7 @@ class Agent:
         self.num_episodes = 0
         self.steps_in_episode = 0
 
-        self.replaybuffer = ReplayBuffer(capacity=10000, epsilon=0.1, alpha=1.5)
+        self.replaybuffer = ReplayBuffer(capacity=10000, epsilon=0.1, alpha=0.7)
 
         self.dqn = DQN()
         self.target = DQN()
@@ -69,17 +69,18 @@ class Agent:
     # Function to check whether the agent has reached the end of an episode
     def has_finished_episode(self):
         has_finished = self.steps_in_episode % self.episode_length == 0 or self._has_reached_goal
-        stuck = self._stuck()
+        stuck = False
 
         if has_finished:
             print("Finished episode {} after {} steps, epsilon={}".format(self.num_episodes, self.num_steps_taken, self._current_epsilon()))
             self.num_episodes += 1
             self.steps_in_episode = 0
             if self._has_reached_goal:
-                self.epsilon /= 2
+                self.epsilon *= self.epsilon_decay ** 5
             else:
                 self.epsilon *= self.epsilon_decay
         elif stuck:
+            print("Stuck, increasing epsilon to {}".format(self._current_epsilon()))
             self.steps_in_episode = 0
             self.epsilon += 0.01
 
@@ -134,6 +135,8 @@ class Agent:
 
         # Convert the distance to a reward
         reward = 1 - distance_to_goal
+        # if self._has_reached_goal:
+        #     reward += 2
         # Create a transition
         transition = (self.state, self.discrete_action, reward, next_state)
 
@@ -146,7 +149,7 @@ class Agent:
             batch = self.replaybuffer.sample(self.batch_size)
             self.dqn.batch_train_q_network(batch, self.gamma, self.target, self.replaybuffer)
         
-        if self.num_steps_taken % self.target_swap == 0:
+        if self.num_steps_taken % self.target_swap == 0 or self._has_reached_goal:
             self.target.q_network.load_state_dict(self.dqn.q_network.state_dict())
 
 
