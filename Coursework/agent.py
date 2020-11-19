@@ -47,7 +47,7 @@ class Agent:
         self.epsilon_init = 1
         self.epsilon = self.epsilon_init
         self.epsilon_decay = 0.1 ** (1 / 50)
-        self.epsilon_min = 0.05
+        self.epsilon_min = 0.01
         self.gamma = 0.95
         self.batch_size = 200
         self.target_swap = 1000
@@ -79,7 +79,10 @@ class Agent:
             print("Finished episode {} after {} steps, epsilon={}, hit_wall={}".format(self.num_episodes, self.num_steps_taken, self._current_epsilon(), self.hit_wall))
             self.num_episodes += 1
             self.steps_in_episode = 0
-            self.epsilon *= self.epsilon_decay
+            if self._has_reached_goal:
+                self.epsilon /= 2
+            else:
+                self.epsilon *= self.epsilon_decay
             self.hit_wall = 0
 
         return has_finished
@@ -136,11 +139,11 @@ class Agent:
 
         # Convert the distance to a reward
         reward = 1 - distance_to_goal
-        if abs(self._last_distance_to_goal - distance_to_goal) < 0.0001:
-            reward -= 0.5
-            self.hit_wall += 1
-        if self._has_reached_goal:
-            reward += 10
+        # if abs(self._last_distance_to_goal - distance_to_goal) < 0.0001:
+        #     reward -= 0.5
+        #     self.hit_wall += 1
+        # if self._has_reached_goal:
+        #     reward += 10
 
         self._last_distance_to_goal = distance_to_goal
         # Create a transition
