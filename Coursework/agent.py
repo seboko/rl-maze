@@ -136,7 +136,7 @@ class Agent:
         # Convert the distance to a reward
         reward = 1 - distance_to_goal
         if abs(next_state[0] - self.state[0]) < 0.0001 or abs(next_state[1] - self.state[1]) < 0.0001:
-            reward -= 0.1
+            reward -= 0.5
         if self._has_reached_goal:
             reward += 2
         # Create a transition
