@@ -50,7 +50,7 @@ class Agent:
         self.epsilon_min = 0.01
         self.gamma = 0.95
         self.batch_size = 200
-        self.target_swap = 1000
+        self.target_swap = 200
 
         self._has_reached_goal = False
 
