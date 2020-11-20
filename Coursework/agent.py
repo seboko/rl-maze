@@ -48,7 +48,7 @@ class Agent:
         self.epsilon = self.epsilon_init
         self.epsilon_decay = 0.1 ** (1 / 70)
         self.epsilon_min = 0.01
-        self.gamma = 0.95
+        self.gamma = 0.9
         self.batch_size = 200
         self.target_swap = 200
 
@@ -135,8 +135,10 @@ class Agent:
 
         # Convert the distance to a reward
         reward = 1 - distance_to_goal
-        # if self._has_reached_goal:
-        #     reward += 2
+        if abs(next_state[0] - self.state[0]) < 0.0001 or abs(next_state[1] - self.state[1]) < 0.0001:
+            reward -= 0.1
+        if self._has_reached_goal:
+            reward += 2
         # Create a transition
         transition = (self.state, self.discrete_action, reward, next_state)
 
