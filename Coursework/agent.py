@@ -61,9 +61,13 @@ class Agent:
         # map discrete to continuous actions
         self._action_map = {
             0: np.array([0.02, 0], dtype=np.float),  # RIGHT
-            1: np.array([0, 0.02], dtype=np.float),  # UP
-            2: np.array([-0.02, 0], dtype=np.float), # LEFT
-            3: np.array([0, -0.02], dtype=np.float)  # DOWN
+            1: np.array([0.014, 0.014], dtype=np.float), # RIGHT UP
+            2: np.array([0, 0.02], dtype=np.float),  # UP
+            3: np.array([-0.014, 0.014], dtype=np.float), # UP LEFT
+            4: np.array([-0.02, 0], dtype=np.float), # LEFT
+            5: np.array([-0.014, -0.014], dtype=np.float), # DOWN LEFT
+            6: np.array([0, -0.02], dtype=np.float),  # DOWN
+            7: np.array([0.014, -0.014], dtype=np.float) # DOWN RIGHT
         }
 
     # Function to check whether the agent has reached the end of an episode
@@ -116,9 +120,9 @@ class Agent:
         q = self.dqn.q_network.forward(torch.tensor([state]).float())
         best = torch.argmax(q).item()
         epsilon = self._current_epsilon()
-        probs = np.full(4, epsilon / 4)
-        probs[best] = 1 - epsilon + epsilon / 4
-        return np.random.choice(range(4), p=probs)
+        probs = np.full(8, epsilon / 8)
+        probs[best] = 1 - epsilon + epsilon / 8
+        return np.random.choice(range(8), p=probs)
     
     def _current_epsilon(self):
         return min(1, max(self.epsilon, self.epsilon_min))
@@ -194,7 +198,7 @@ class DQN:
     # The class initialisation function.
     def __init__(self):
         # Create a Q-network, which predicts the q-value for a particular state.
-        self.q_network = Network(input_dimension=2, output_dimension=4)
+        self.q_network = Network(input_dimension=2, output_dimension=8)
         # Define the optimiser which is used when updating the Q-network. The learning rate determines how big each gradient step is during backpropagation.
         self.optimiser = torch.optim.Adam(self.q_network.parameters(), lr=0.001)
 
