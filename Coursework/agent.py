@@ -38,7 +38,7 @@ class Agent:
         self.num_episodes = 0
         self.steps_in_episode = 0
 
-        self.replaybuffer = ReplayBuffer(capacity=10000, epsilon=0.1, alpha=0.7)
+        self.replaybuffer = ReplayBuffer(capacity=20000, epsilon=0.1, alpha=1)
 
         self.dqn = DQN()
         self.target = DQN()
