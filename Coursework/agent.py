@@ -15,6 +15,7 @@
 ############################################################################
 ############################################################################
 
+import time
 import numpy as np
 import torch
 from collections import deque
@@ -47,16 +48,15 @@ class Agent:
         self.epsilon_init = 1
         self.epsilon = self.epsilon_init
         self.epsilon_decay = 0.1 ** (1 / 70)
-        self.epsilon_min = 0.01
+        self.epsilon_min = 0.1
         self.gamma = 0.9
         self.batch_size = 200
         self.target_swap = 200
 
         self._has_reached_goal = False
-
-        self.min_d = 0.01
-        self.n_last_rewards = 30
-        self.last_rewards = np.zeros(self.n_last_rewards)
+        self._greedy = False
+        self._found_greedy = False
+        self._birthday = time.time()
 
         # map discrete to continuous actions
         self._action_map = {
@@ -68,41 +68,28 @@ class Agent:
 
     # Function to check whether the agent has reached the end of an episode
     def has_finished_episode(self):
-        has_finished = self.steps_in_episode % self.episode_length == 0 or self._has_reached_goal
-        stuck = False
+        has_finished = self.steps_in_episode % self.episode_length == 0
 
         if has_finished:
             print("Finished episode {} after {} steps, epsilon={}".format(self.num_episodes, self.num_steps_taken, self._current_epsilon()))
             self.num_episodes += 1
             self.steps_in_episode = 0
-            if self._has_reached_goal:
-                self.epsilon *= self.epsilon_decay ** 5
-            else:
-                self.epsilon *= self.epsilon_decay
-        elif stuck:
-            print("Stuck, increasing epsilon to {}".format(self._current_epsilon()))
-            self.steps_in_episode = 0
-            self.epsilon += 0.01
+            self.epsilon *= self.epsilon_decay
 
-        return has_finished or stuck
+        return has_finished
 
-    def _stuck(self):
-        last_transitions = self.replaybuffer.get_last_transitions(20)
-        if last_transitions is None:
-            return False
-        if np.ptp(last_transitions[:, 0]) < 0.02 and np.ptp(last_transitions[:, 1]) < 0.02:
-            print("stuck x={}, y={}".format(np.ptp(last_transitions[:, 0]), np.ptp(last_transitions[:, 1])))
-            return True
-        return False
 
     # Function to get the next action, using whatever method you like
     def get_next_action(self, state):
-        # Here, the action is random, but you can change this
-        discrete_action = self._choose_next_action(state)
-        action = self._discrete_action_to_continuous(discrete_action)
         # Update the number of steps which the agent has taken
         self.num_steps_taken += 1
         self.steps_in_episode += 1
+
+        if self._greedy:
+            return self.get_greedy_action(state)
+
+        discrete_action = self._choose_next_action(state)
+        action = self._discrete_action_to_continuous(discrete_action)
         # Store the state; this will be used later, when storing the transition
         self.state = state
         # Store the action; this will be used later, when storing the transition
@@ -130,26 +117,33 @@ class Agent:
 
     # Function to set the next state and distance, which resulted from applying action self.action at state self.state
     def set_next_state_and_distance(self, next_state, distance_to_goal):
-        
-        self._has_reached_goal = distance_to_goal < 0.03
 
+        if self._greedy and self.steps_in_episode <= 100 and distance_to_goal < 0.03:
+            print("Greedy policy reaches goal in {} steps".format(self.steps_in_episode))
+            self._found_greedy = True
+        
+        if time.time() - self._birthday >= 480:
+            self._greedy = self.steps_in_episode <= 100 or self._found_greedy
+        
+        
         # Convert the distance to a reward
         reward = 1 - distance_to_goal
         if abs(next_state[0] - self.state[0]) < 0.0001 or abs(next_state[1] - self.state[1]) < 0.0001:
             reward -= 0.5
-        if self._has_reached_goal:
-            reward += 2
+
         # Create a transition
         transition = (self.state, self.discrete_action, reward, next_state)
 
         self.replaybuffer.append(transition)
 
-        if len(self.replaybuffer) >= self.batch_size:
-            batch = self.replaybuffer.sample(self.batch_size)
-            self.dqn.batch_train_q_network(batch, self.gamma, self.target, self.replaybuffer)
+        # Only train when not trying greedy policy
+        if not self._greedy:
+            if len(self.replaybuffer) >= self.batch_size:
+                batch = self.replaybuffer.sample(self.batch_size)
+                self.dqn.batch_train_q_network(batch, self.gamma, self.target, self.replaybuffer)
         
-        if self.num_steps_taken % self.target_swap == 0 or self._has_reached_goal:
-            self.target.q_network.load_state_dict(self.dqn.q_network.state_dict())
+            if self.num_steps_taken % self.target_swap == 0:
+                self.target.q_network.load_state_dict(self.dqn.q_network.state_dict())
 
 
 
@@ -159,7 +153,6 @@ class Agent:
     def get_greedy_action(self, state):
         q = self.dqn.q_network.forward(torch.tensor([state]).float())
         best = torch.argmax(q).item()
-        print("state = {}, best_action={}".format(state, best))
         return self._discrete_action_to_continuous(best)
 
 
