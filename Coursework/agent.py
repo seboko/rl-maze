@@ -116,17 +116,14 @@ class Agent:
 
     # Function to set the next state and distance, which resulted from applying action self.action at state self.state
     def set_next_state_and_distance(self, next_state, distance_to_goal):
+        # try out the greedy policy after 8 minutes
+        if time.time() - self._birthday >= 480:
+            self._greedy = self.steps_in_episode <= 100 or self._found_greedy
 
+        # check if we're on a greedy policy and have found the goal
         if self._greedy and self.steps_in_episode <= 100 and distance_to_goal < 0.03:
             print("Greedy policy reaches goal in {} steps".format(self.steps_in_episode))
             self._found_greedy = True
-        
-        if time.time() - self._birthday >= 480:
-            self._greedy = self.steps_in_episode <= 100 or self._found_greedy
-            self.epsilon = 0.2
-            self.episode_length = 500
-
-        
         
         # Convert the distance to a reward
         reward = 1 - distance_to_goal
@@ -257,6 +254,8 @@ class ReplayBuffer:
         self._buffer[self._index] = np.array(state + action + reward + next_state)
         self._size = min(self._size + 1, self._capacity)
 
+        self._weights[self._index] = np.max(self._weights)
+
         self._renormalize_weights()
 
         self._index = (self._index + 1) % self._capacity
@@ -276,12 +275,5 @@ class ReplayBuffer:
         self._last_indices_returned = indices
         return self._buffer[indices]
 
-    def get_last_transitions(self, n):
-        if n > self._size:
-            return None
-        if self._index - n < 0:
-            return np.concatenate((self._buffer[:self._index], self._buffer[-(n-self._index):]))
-        return self._buffer[self._index-n:self._index]
-    
     def __len__(self):
         return self._size
