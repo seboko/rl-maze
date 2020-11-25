@@ -56,6 +56,7 @@ class Agent:
         self._greedy = False
         self._found_greedy = False
         self._birthday = time.time()
+        self._last_distance = 100
 
         # map discrete to continuous actions
         self._action_map = {
@@ -70,7 +71,7 @@ class Agent:
         has_finished = self.steps_in_episode % self.episode_length == 0
 
         if has_finished:
-            print("Finished episode {} after {} steps, epsilon={}".format(self.num_episodes, self.num_steps_taken, self._current_epsilon()))
+            print("Finished episode {} after {} steps, epsilon={}, greedy={}, last_distance={}".format(self.num_episodes, self.num_steps_taken, self._current_epsilon(), self._greedy, self._last_distance))
             self.num_episodes += 1
             self.steps_in_episode = 0
             self.epsilon *= self.epsilon_decay
@@ -116,19 +117,22 @@ class Agent:
 
     # Function to set the next state and distance, which resulted from applying action self.action at state self.state
     def set_next_state_and_distance(self, next_state, distance_to_goal):
-        # try out the greedy policy after 8 minutes
-        if time.time() - self._birthday >= 480:
+        # try out the greedy policy after 5 minutes
+        if time.time() - self._birthday >= 300:
             self._greedy = self.steps_in_episode <= 100 or self._found_greedy
+            if self.epsilon != 0.8:
+                self.epsilon = 0.8
 
         # check if we're on a greedy policy and have found the goal
         if self._greedy and self.steps_in_episode <= 100 and distance_to_goal < 0.03:
-            print("Greedy policy reaches goal in {} steps".format(self.steps_in_episode))
             self._found_greedy = True
         
         # Convert the distance to a reward
         reward = 1 - distance_to_goal
         if abs(next_state[0] - self.state[0]) < 0.0001 or abs(next_state[1] - self.state[1]) < 0.0001:
             reward -= 0.5
+        
+        self._last_distance = distance_to_goal
 
         # Create a transition
         transition = (self.state, self.discrete_action, reward, next_state)
@@ -188,26 +192,12 @@ class DQN:
         self.optimiser = torch.optim.Adam(self.q_network.parameters(), lr=0.001)
 
     
-    def state_dict_eq(self, d1, d2):
-        for (k1, v1), (k2, v2) in zip(d1.items(), d2.items()):
-            if k1 != k2:
-                print("keys not equal", k1, k2)
-                return False
-            if not torch.equal(v1, v2):
-                print("tensors not equal")
-                return False
-        return True
-
     # Train on batch of transitions
     def batch_train_q_network(self, batch, gamma, target_network, replaybuffer=None):
-        if target_network is not None:
-            target_net_weights = target_network.q_network.state_dict()
         self.optimiser.zero_grad()
         loss = self._calculate_batch_loss(batch, gamma, target_network, replaybuffer)
         loss.backward()
         self.optimiser.step()
-        if target_network is not None:
-            assert self.state_dict_eq(target_network.q_network.state_dict(), target_net_weights)
         return loss.item()
 
     def _calculate_batch_loss(self, batch, gamma, target_network, replaybuffer):
