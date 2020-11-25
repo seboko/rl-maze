@@ -53,7 +53,6 @@ class Agent:
         self.batch_size = 200
         self.target_swap = 200
 
-        self._has_reached_goal = False
         self._greedy = False
         self._found_greedy = False
         self._birthday = time.time()
@@ -124,6 +123,9 @@ class Agent:
         
         if time.time() - self._birthday >= 480:
             self._greedy = self.steps_in_episode <= 100 or self._found_greedy
+            self.epsilon = 0.2
+            self.episode_length = 500
+
         
         
         # Convert the distance to a reward
