@@ -142,9 +142,6 @@ class Agent:
         # Create a transition
         transition = (self.state, self.discrete_action, reward, next_state)
 
-        # save the last 10 rewards to see if we got stuck
-        self.last_rewards[self.steps_in_episode % self.n_last_rewards] = reward
-
         self.replaybuffer.append(transition)
 
         if len(self.replaybuffer) >= self.batch_size:
