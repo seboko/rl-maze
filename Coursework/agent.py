@@ -20,6 +20,7 @@ import numpy as np
 import torch
 from collections import deque
 import random
+import matplotlib.pyplot as plt
 
 
 class Agent:
@@ -27,7 +28,7 @@ class Agent:
     # Function to initialise the agent
     def __init__(self):
         # Set the episode length
-        self.episode_length = 2000
+        self.episode_length = 3000
         # Reset the total number of steps which the agent has taken
         self.num_steps_taken = 0
         # The state variable stores the latest state of the agent in the environment
@@ -39,7 +40,7 @@ class Agent:
         self.num_episodes = 0
         self.steps_in_episode = 0
 
-        self.replaybuffer = ReplayBuffer(capacity=20000, epsilon=0.1, alpha=1)
+        self.replaybuffer = ReplayBuffer(capacity=20000, epsilon=0.1, alpha=0.7)
 
         self.dqn = DQN()
         self.target = DQN()
@@ -47,16 +48,22 @@ class Agent:
 
         self.epsilon_init = 1
         self.epsilon = self.epsilon_init
-        self.epsilon_decay = 0.1 ** (1 / 70)
+        self.epsilon_decay = 0.1 ** (1 / 100)
+        self.episode_len_decay = 0.1 ** (1 / 50)
         self.epsilon_min = 0.1
         self.gamma = 0.9
-        self.batch_size = 200
+        self.batch_size = 1000
         self.target_swap = 200
 
         self._greedy = False
         self._found_greedy = False
         self._birthday = time.time()
         self._last_distance = 100
+
+        # self._rewards = np.zeros((100, self.episode_length))
+        # self._losses = np.zeros((100, self.episode_length))
+        # self._has_plotted = False
+        
 
         # map discrete to continuous actions
         self._action_map = {
@@ -74,6 +81,7 @@ class Agent:
             print("Finished episode {} after {} steps, epsilon={}, greedy={}, last_distance={}".format(self.num_episodes, self.num_steps_taken, self._current_epsilon(), self._greedy, self._last_distance))
             self.num_episodes += 1
             self.steps_in_episode = 0
+            self.episode_length = max(100, int(self.episode_length * self.episode_len_decay))
             self.epsilon *= self.epsilon_decay
 
         return has_finished
@@ -86,7 +94,7 @@ class Agent:
         self.steps_in_episode += 1
 
         if self._greedy:
-            return self.get_greedy_action(state)
+            return self.get_greedy_action(state, False)
 
         discrete_action = self._choose_next_action(state)
         action = self._discrete_action_to_continuous(discrete_action)
@@ -117,11 +125,9 @@ class Agent:
 
     # Function to set the next state and distance, which resulted from applying action self.action at state self.state
     def set_next_state_and_distance(self, next_state, distance_to_goal):
-        # try out the greedy policy after 5 minutes
-        if time.time() - self._birthday >= 300:
+        # try out the greedy policy after 8 minutes
+        if time.time() - self._birthday >= 480:
             self._greedy = self.steps_in_episode <= 100 or self._found_greedy
-            if self.epsilon != 0.8:
-                self.epsilon = 0.8
 
         # check if we're on a greedy policy and have found the goal
         if self._greedy and self.steps_in_episode <= 100 and distance_to_goal < 0.03:
@@ -130,7 +136,20 @@ class Agent:
         # Convert the distance to a reward
         reward = 1 - distance_to_goal
         if abs(next_state[0] - self.state[0]) < 0.0001 or abs(next_state[1] - self.state[1]) < 0.0001:
-            reward -= 0.5
+            reward -= 0.2
+        
+        # self._rewards[self.num_episodes, self.steps_in_episode-1] = reward
+
+        # if not self._has_plotted and time.time() - self._birthday >= 590:
+        #     plt.plot(np.average(self._rewards, axis=1))
+        #     plt.savefig("reward_vs_episodes_{}.png".format(time.time()))
+
+        #     plt.clf()
+
+        #     plt.plot(np.average(self._losses, axis=1))
+        #     plt.yscale('log')
+        #     plt.savefig("loss_vs_episodes_{}.png".format(time.time()))
+        #     self._has_plotted = True
         
         self._last_distance = distance_to_goal
 
@@ -153,8 +172,10 @@ class Agent:
 
 
     # Function to get the greedy action for a particular state
-    def get_greedy_action(self, state):
+    def get_greedy_action(self, state, p=True):
         q = self.dqn.q_network.forward(torch.tensor([state]).float())
+        if p:
+            print("state {}, q {}".format(state, q))
         best = torch.argmax(q).item()
         return self._discrete_action_to_continuous(best)
 
