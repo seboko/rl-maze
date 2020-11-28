@@ -49,7 +49,7 @@ class Agent:
         self.epsilon_init = 1
         self.epsilon = self.epsilon_init
         self.epsilon_decay = 0.1 ** (1 / 100)
-        self.episode_len_decay = 0.1 ** (1 / 50)
+        self.episode_len_decay = 0.8
         self.epsilon_min = 0.1
         self.gamma = 0.9
         self.batch_size = 1000
@@ -59,6 +59,8 @@ class Agent:
         self._found_greedy = False
         self._birthday = time.time()
         self._last_distance = 100
+        self._found_goal_in_episode = False
+        self._next_episode_length = self.episode_length
 
         # self._rewards = np.zeros((100, self.episode_length))
         # self._losses = np.zeros((100, self.episode_length))
@@ -78,11 +80,12 @@ class Agent:
         has_finished = self.steps_in_episode % self.episode_length == 0
 
         if has_finished:
-            print("Finished episode {} after {} steps, epsilon={}, greedy={}, last_distance={}".format(self.num_episodes, self.num_steps_taken, self._current_epsilon(), self._greedy, self._last_distance))
+            print(f"Finished episode {self.num_episodes} after {self.num_steps_taken} steps, episode_length={self.episode_length}, epsilon={self._current_epsilon()}, greedy={self._greedy}, last_distance={self._last_distance}")
             self.num_episodes += 1
             self.steps_in_episode = 0
-            self.episode_length = max(100, int(self.episode_length * self.episode_len_decay))
+            self._found_goal_in_episode = False
             self.epsilon *= self.epsilon_decay
+            self.episode_length = self._next_episode_length
 
         return has_finished
 
@@ -125,13 +128,18 @@ class Agent:
 
     # Function to set the next state and distance, which resulted from applying action self.action at state self.state
     def set_next_state_and_distance(self, next_state, distance_to_goal):
-        # try out the greedy policy after 8 minutes
-        if time.time() - self._birthday >= 480:
-            self._greedy = self.steps_in_episode <= 100 or self._found_greedy
+        # # try out the greedy policy after 8 minutes
+        # if time.time() - self._birthday >= 480:
+        #     self._greedy = self.steps_in_episode <= 100 or self._found_greedy
 
-        # check if we're on a greedy policy and have found the goal
-        if self._greedy and self.steps_in_episode <= 100 and distance_to_goal < 0.03:
-            self._found_greedy = True
+        # # check if we're on a greedy policy and have found the goal
+        # if self._greedy and self.steps_in_episode <= 100 and distance_to_goal < 0.03:
+        #     self._found_greedy = True
+
+        if distance_to_goal < 0.03 and not self._found_goal_in_episode and self.episode_length > 100:
+            self._found_goal_in_episode = True
+            self._next_episode_length = max(100, int(self.episode_length * self.episode_len_decay))
+            print(f"Found goal, reducing next episode length to {self.episode_length}")
         
         # Convert the distance to a reward
         reward = 1 - distance_to_goal
