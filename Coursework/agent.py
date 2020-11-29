@@ -50,7 +50,7 @@ class Agent:
         self.epsilon = self.epsilon_init
         self.epsilon_decay = 0.1 ** (1 / 100)
         self.episode_len_decay = 0.8
-        self.epsilon_min = 0.1
+        self.epsilon_min = 0.3
         self.gamma = 0.9
         self.batch_size = 1000
         self.target_swap = 200
@@ -58,14 +58,10 @@ class Agent:
         self._greedy = False
         self._found_greedy = False
         self._birthday = time.time()
-        self._last_distance = 100
+        self._last_distance = 100 # This is only used for logging purposes
         self._found_goal_in_episode = False
         self._next_episode_length = self.episode_length
 
-        # self._rewards = np.zeros((100, self.episode_length))
-        # self._losses = np.zeros((100, self.episode_length))
-        # self._has_plotted = False
-        
 
         # map discrete to continuous actions
         self._action_map = {
@@ -96,6 +92,9 @@ class Agent:
         self.num_steps_taken += 1
         self.steps_in_episode += 1
 
+        # try out the greedy policy every 5 episodes
+        self._greedy = (self.num_episodes % 5 == 0 and self.steps_in_episode <= 100 and time.time() - self._birthday >= 480) or self._found_greedy
+        
         if self._greedy:
             return self.get_greedy_action(state, False)
 
@@ -128,37 +127,22 @@ class Agent:
 
     # Function to set the next state and distance, which resulted from applying action self.action at state self.state
     def set_next_state_and_distance(self, next_state, distance_to_goal):
-        # # try out the greedy policy after 8 minutes
-        # if time.time() - self._birthday >= 480:
-        #     self._greedy = self.steps_in_episode <= 100 or self._found_greedy
 
-        # # check if we're on a greedy policy and have found the goal
-        # if self._greedy and self.steps_in_episode <= 100 and distance_to_goal < 0.03:
-        #     self._found_greedy = True
+        # check if we're on a greedy policy and have found the goal
+        if self._greedy and self.steps_in_episode <= 100 and distance_to_goal < 0.03:
+            self._found_greedy = True
 
-        if distance_to_goal < 0.03 and not self._found_goal_in_episode and self.episode_length > 100:
+        if distance_to_goal < 0.03 and not self._found_goal_in_episode:
             self._found_goal_in_episode = True
-            self._next_episode_length = max(100, int(self.episode_length * self.episode_len_decay))
-            print(f"Found goal, reducing next episode length to {self.episode_length}")
+            self._next_episode_length = max(200, int(self.episode_length * self.episode_len_decay))
+            print(f"Found goal, reducing next episode length to {self._next_episode_length}")
         
         # Convert the distance to a reward
         reward = 1 - distance_to_goal
         if abs(next_state[0] - self.state[0]) < 0.0001 or abs(next_state[1] - self.state[1]) < 0.0001:
-            reward -= 0.2
+            reward -= 0.5
         
-        # self._rewards[self.num_episodes, self.steps_in_episode-1] = reward
-
-        # if not self._has_plotted and time.time() - self._birthday >= 590:
-        #     plt.plot(np.average(self._rewards, axis=1))
-        #     plt.savefig("reward_vs_episodes_{}.png".format(time.time()))
-
-        #     plt.clf()
-
-        #     plt.plot(np.average(self._losses, axis=1))
-        #     plt.yscale('log')
-        #     plt.savefig("loss_vs_episodes_{}.png".format(time.time()))
-        #     self._has_plotted = True
-        
+        # Only used for logging
         self._last_distance = distance_to_goal
 
         # Create a transition
